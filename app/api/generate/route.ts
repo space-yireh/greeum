@@ -3,7 +3,7 @@ import sharp from 'sharp';
 import { createHash } from 'node:crypto';
 import { MAX_BODY, MAX_FILE, imageType, isStyle, Limiter } from '../../../lib/policy';
 import { buildImageRequest, DEFAULT_MODEL, loadStyleReference, normalizeMonochrome } from '../../../lib/generation';
-export const runtime='nodejs'; export const maxDuration=120;
+export const runtime='nodejs'; export const maxDuration=240;
 const limiter=new Limiter();
 const headers={'Cache-Control':'no-store, private'};
 function error(message:string,status:number) { return Response.json({error:message},{status,headers}); }
@@ -38,9 +38,9 @@ export async function POST(req:Request) {
    clean=await image.rotate().resize(1536,1536,{fit:'inside',withoutEnlargement:true}).jpeg({quality:90}).toBuffer();
   } catch { return error('손상되었거나 너무 큰 해상도의 사진입니다. 1,600만 화소 이하로 선택해 주세요.',400); }
   let reference:string|undefined;
-  try { reference=await loadStyleReference(); } catch { return error('그림체 레퍼런스 설정을 확인해 주세요. 운영자는 assets/style-reference.png 파일과 환경변수를 확인해야 합니다.',503); }
+  try { reference=await loadStyleReference(style); } catch { return error('그림체 레퍼런스 설정을 확인해 주세요. 운영자는 assets/style-reference.png 파일과 환경변수를 확인해야 합니다.',503); }
   const upstream=await fetch('https://openrouter.ai/api/v1/images',{
-   method:'POST',cache:'no-store',signal:AbortSignal.timeout(100000),
+   method:'POST',cache:'no-store',signal:AbortSignal.timeout(180000),
    headers:{Authorization:`Bearer ${process.env.OPENROUTER_API_KEY}`,'Content-Type':'application/json'},
    body:JSON.stringify(buildImageRequest(style,clean,process.env.OPENROUTER_MODEL || DEFAULT_MODEL,reference))
   });

@@ -12,7 +12,7 @@ export default function Home() {
  async function generate() {
   if(!file||!consent||busy)return;setBusy(true);setError('');setResult('');
   const ac=new AbortController();controller.current=ac;
-  const timer=setTimeout(()=>ac.abort(),115000);
+  const timer=setTimeout(()=>ac.abort(),200000);
   try {const form=new FormData();form.set('photo',file);form.set('style',style);form.set('consent','yes');
    const response=await fetch('/api/generate',{method:'POST',body:form,signal:ac.signal});
    if(!response.ok){const data=await response.json();throw new Error(data.error||'생성하지 못했어요.');}

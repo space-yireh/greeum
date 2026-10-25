@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "typecheck": "tsc --noEmit",
-    "test": "node --conditions=react-server --import tsx --test tests/*.test.ts"
+    "test": "node --conditions=react-server --import tsx --test tests/*.test.ts",
+    "compare": "node --env-file=.env.local --conditions=react-server --import tsx scripts/compare-models.ts"
   },
   "dependencies": {
     "next": "16.4.3",
