@@ -2,7 +2,7 @@ import { readFile, mkdir, writeFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import path from 'node:path';
 import sharp from 'sharp';
-import { buildImageRequest, normalizeMonochrome, prepareStyleReference, BASELINE_MODEL } from '../lib/generation';
+import { buildImageRequest, normalizeMonochrome, prepareStyleReference, loadStyleReference, BASELINE_MODEL } from '../lib/generation';
 import { buildCaricaturePrompt, PROMPT_VERSION } from '../lib/prompts';
 import { imageType, MAX_FILE } from '../lib/policy';
 import { getComparisonOptions, getReferenceLimit, getReportedCost, type Candidate } from '../lib/comparison';
@@ -10,7 +10,8 @@ import { getComparisonOptions, getReferenceLimit, getReportedCost, type Candidat
 export async function runComparison(args=process.argv.slice(2)) {
 function arg(name:string) { const i=args.indexOf(name); return i<0?undefined:args[i+1]; }
 const photoPath=arg('--photo'),referencePath=arg('--reference'),outPath=arg('--out');
-if(!photoPath || !referencePath || !outPath) {
+const appReferences=args.includes('--app-references'), twoModels=args.includes('--two-models');
+if(!photoPath || (!referencePath && !appReferences) || !outPath) {
  console.error('Usage: npm run compare -- --photo /absolute/photo.jpg --reference /absolute/style.png --out /absolute/new-result-folder');
  process.exit(1);
 }
@@ -20,9 +21,9 @@ const baseline=process.env.OPENROUTER_BASELINE_MODEL || BASELINE_MODEL;
 const models:Candidate[]=[
  {id:baseline,label:'기존 모델'},
  {id:'openai/gpt-image-2.5-sunburst',label:'GPT Image 2.5 Sunburst'},
- {id:'openai/gpt-image-2.5-flare',label:'GPT Image 2.5 Flare'}
+ ...(!twoModels?[{id:'openai/gpt-image-2.5-flare',label:'GPT Image 2.5 Flare'}]:[])
 ];
-if(new Set(models.map(m=>m.id)).size!==3) throw new Error('Baseline must differ from GPT candidates. Keep OPENROUTER_MODEL at the existing baseline.');
+if(new Set(models.map(m=>m.id)).size!==models.length) throw new Error('Baseline must differ from GPT candidates.');
 const output=path.resolve(outPath);
 // Never replace a previous run or accidentally use the project directory as output.
 await mkdir(output,{recursive:false});
@@ -34,7 +35,7 @@ async function prepareImage(file:string,identity:boolean) {
  const buffer=await img.rotate().resize(1536,1536,{fit:'inside',withoutEnlargement:true}).flatten({background:'#ffffff'}).jpeg({quality:90}).toBuffer();
  return {buffer,hash:createHash('sha256').update(buffer).digest('hex'),role:identity?'identity':'style-only'};
 }
-const identity=await prepareImage(photoPath,true),reference=await prepareImage(referencePath,false);
+const identity=await prepareImage(photoPath,true),reference=referencePath?await prepareImage(referencePath,false):undefined;
 const discovered=await fetch('https://openrouter.ai/api/v1/images/models',{signal:AbortSignal.timeout(20000)});
 if(!discovered.ok) throw new Error('Image model discovery failed. No paid requests were sent.');
 const catalog=await discovered.json();
@@ -54,7 +55,7 @@ for(const model of models) {
  if(!eligible.length) throw new Error(`Requested comparison settings unsupported for ${model.id}. No paid requests sent.`);
  verified.push({...model,referenceLimit,options,providers:eligible.map((e:any)=>e.provider_tag).filter(Boolean),endpoints:endpoints.endpoints});
 }
-const report:any={startedAt:new Date().toISOString(),promptVersion:PROMPT_VERSION,baseline,inputs:[{role:identity.role,sha256:identity.hash},{role:reference.role,sha256:reference.hash}],settings:'Same preprocessed photo and reference, same prompt per expression; square approx. 1024px. Gemini 1K; GPT medium quality, size 1024x1024. Quality settings are not equivalent across architectures.',models:verified,results:[],notes:['No automatic retries or model fallback. Default model and .env.local are unchanged.','Model-original previews are not thresholded. Separate app-processed PNGs use the exact application grayscale function.','usage.cost is recorded only if OpenRouter reports it. Null means unavailable, not zero.','Times measure client-observed API round trip including response parsing, not model-only inference.','This one sample per cell is exploratory and cannot establish population-wide likeness quality.','Only this explicit local comparison tool saves results; the web app still stores no uploaded or generated images.']};
+const report:any={startedAt:new Date().toISOString(),promptVersion:PROMPT_VERSION,baseline,inputs:[{role:identity.role,sha256:identity.hash},...(reference?[{role:reference.role,sha256:reference.hash}]:[])],settings:'Same preprocessed photo and style-specific reference, same prompt per expression; square aspect ratio. Gemini 1K; Sunburst high quality with no size parameter; Flare medium quality at 1024x1024. Quality settings are not equivalent across architectures.',models:verified,results:[],notes:['No automatic retries or model fallback. Default model and .env.local are unchanged.','Model-original previews are not thresholded. Separate app-processed PNGs use the exact application grayscale function.','usage.cost is recorded only if OpenRouter reports it. Null means unavailable, not zero.','Times measure client-observed API round trip including response parsing, not model-only inference.','This one sample per cell is exploratory and cannot establish population-wide likeness quality.','Only this explicit local comparison tool saves results; the web app still stores no uploaded or generated images.']};
 function escape(s:unknown){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]!));}
 async function save() {
  await writeFile(path.join(output,'report.json'),JSON.stringify(report,null,2));
@@ -66,10 +67,11 @@ await save();
 for(const model of verified) {
  for(const style of ['cute','similar'] as const) {
   const useReference=model.referenceLimit>=2;
-  const selectedReference=useReference?await prepareStyleReference(await readFile(referencePath),style,process.env.CARICATURE_STYLE_REFERENCE_LAYOUT==='paired'):undefined;
+  const selectedReference=useReference?(appReferences?await loadStyleReference(style):await prepareStyleReference(await readFile(referencePath!),style,process.env.CARICATURE_STYLE_REFERENCE_LAYOUT==='paired')):undefined;
+  if(useReference && !selectedReference) throw new Error('Style reference is not configured.');
   const prompt=buildCaricaturePrompt(style,useReference);
   const body={...buildImageRequest(style,identity.buffer,model.id,selectedReference),...model.options,provider:{only:model.providers,allow_fallbacks:false}};
-  const row:any={model:model.id,style,prompt,referenceCount:useReference?2:1,styleReferenceSha256:selectedReference?createHash('sha256').update(Buffer.from(selectedReference.split(',')[1],'base64')).digest('hex'):null,options:model.options,provider:body.provider,status:'pending',costUsd:null};
+  const row:any={model:model.id,style,promptVersion:PROMPT_VERSION,prompt,referenceCount:body.input_references.length,styleReferenceSha256:selectedReference?createHash('sha256').update(Buffer.from(selectedReference.split(',')[1],'base64')).digest('hex'):null,options:model.options,provider:body.provider,status:'pending',costUsd:null};
   const start=performance.now();
   console.log(`Generating ${model.label} / ${style} (one paid request, no retry)`);
   try {

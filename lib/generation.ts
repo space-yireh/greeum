@@ -29,13 +29,14 @@ export async function loadStyleReference(style: Style): Promise<string | undefin
  const configured=process.env.CARICATURE_STYLE_REFERENCE_PATH;
  if(!configured) return undefined;
  if(configured!=='assets/style-reference.png') throw new Error('Invalid style reference configuration');
- const bytes=await readFile(path.join(process.cwd(),'assets','style-reference.png'));
- return prepareStyleReference(bytes,style,process.env.CARICATURE_STYLE_REFERENCE_LAYOUT==='paired');
+ const filename=style==='similar'?'style-reference-similar.png':'style-reference-cute.png';
+ const bytes=await readFile(path.join(process.cwd(),'assets',filename));
+ return prepareStyleReference(bytes,style,false);
 }
 export function buildImageRequest(style: Style, identity: Buffer, model: string, reference?: string) {
  const urls=[`data:image/jpeg;base64,${identity.toString('base64')}`];
  if(reference) urls.push(reference);
- const options:{resolution?:string;quality?:string;size?:string}=model===BASELINE_MODEL?{resolution:'1K'}:model.startsWith('openai/gpt-image-2.5-')?{quality:'medium',size:'1024x1024'}:{};
+ const options:{resolution?:string;quality?:string;size?:string}=model===BASELINE_MODEL?{resolution:'1K'}:model===DEFAULT_MODEL?{quality:'high'}:model.startsWith('openai/gpt-image-2.5-')?{quality:'medium',size:'1024x1024'}:{};
  return {model,n:1,...options,aspect_ratio:'1:1',prompt:buildCaricaturePrompt(style,!!reference),input_references:urls.map(url=>({type:'image_url',image_url:{url}}))};
 }
 /** Remove chroma while preserving every antialiased edge and fine grayscale ink stroke. */

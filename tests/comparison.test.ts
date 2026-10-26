@@ -8,7 +8,7 @@ test('A/B preserves baseline, shares identity/style prompt, applies only support
  for(const request of requests){assert.equal(request.prompt,requests[0].prompt);assert.deepEqual(request.input_references,requests[0].input_references);}
  assert.equal(BASELINE_MODEL,'google/gemini-nano-banana-2.1');
  assert.equal(requests[0].resolution,'1K');assert.equal(requests[0].quality,undefined);
- assert.equal(requests[1].quality,'medium');assert.equal(requests[1].size,'1024x1024');assert.equal(requests[1].resolution,undefined);
+ assert.equal(requests[1].quality,'high');assert.equal(requests[1].size,undefined);assert.equal(requests[1].resolution,undefined);
 });
 test('reference fallback is conservative and retains original as first image',()=>{
  assert.equal(getReferenceLimit([{supported_parameters:{input_references:{max:16}}}]),16);

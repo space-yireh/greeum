@@ -18,7 +18,7 @@ test('six-cell comparison writes raw/processed images, exact prompts and real-re
   globalThis.fetch=async(url,init)=>{
    const u=String(url);
    if(u.endsWith('/images/models'))return Response.json({data:ids.map(id=>({id,architecture:{input_modalities:['image'],output_modalities:['image']}}))});
-   if(u.endsWith('/endpoints'))return Response.json({endpoints:[{provider_tag:'test-provider',supported_parameters:{input_references:{max:u.includes('flare')?1:16},resolution:{values:['1K']},quality:{values:['medium']}}}]});
+   if(u.endsWith('/endpoints'))return Response.json({endpoints:[{provider_tag:'test-provider',supported_parameters:{input_references:{max:u.includes('flare')?1:16},resolution:{values:['1K']},quality:{values:['medium','high']}}}]});
    requests.push(JSON.parse(init!.body as string));return Response.json({data:[{b64_json:photo.toString('base64')}],usage:{cost:0.02,prompt_tokens:10,completion_tokens:20,total_tokens:30}});
   };
   const out=path.join(temp,'results');await runComparison(['--photo',path.join(temp,'photo.png'),'--reference',path.join(temp,'ref.png'),'--out',out]);

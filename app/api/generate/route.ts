@@ -38,7 +38,7 @@ export async function POST(req:Request) {
    clean=await image.rotate().resize(1536,1536,{fit:'inside',withoutEnlargement:true}).jpeg({quality:90}).toBuffer();
   } catch { return error('손상되었거나 너무 큰 해상도의 사진입니다. 1,600만 화소 이하로 선택해 주세요.',400); }
   let reference:string|undefined;
-  try { reference=await loadStyleReference(style); } catch { return error('그림체 레퍼런스 설정을 확인해 주세요. 운영자는 assets/style-reference.png 파일과 환경변수를 확인해야 합니다.',503); }
+  try { reference=await loadStyleReference(style); } catch { return error('그림체 레퍼런스 설정을 확인해 주세요. 운영자는 assets의 스타일별 참고 이미지 파일과 환경변수를 확인해야 합니다.',503); }
   const upstream=await fetch('https://openrouter.ai/api/v1/images',{
    method:'POST',cache:'no-store',signal:AbortSignal.timeout(180000),
    headers:{Authorization:`Bearer ${process.env.OPENROUTER_API_KEY}`,'Content-Type':'application/json'},

@@ -42,10 +42,10 @@ test('paired reference sends only the chosen panel and rejects unsuitable sheet 
  await assert.rejects(()=>prepareStyleReference(square,'cute',true),/side-by-side/);
 });
 
-test('selected GPT default uses medium square output and preserves Gemini settings',()=>{
+test('selected GPT default uses high quality without size and preserves Gemini settings',()=>{
  assert.equal(DEFAULT_MODEL,'openai/gpt-image-2.5-sunburst');
- assert.equal(buildImageRequest('cute',Buffer.from('x'),DEFAULT_MODEL).quality,'medium');
- assert.equal(buildImageRequest('cute',Buffer.from('x'),DEFAULT_MODEL).size,'1024x1024');
+ assert.equal(buildImageRequest('cute',Buffer.from('x'),DEFAULT_MODEL).quality,'high');
+ assert.equal(buildImageRequest('cute',Buffer.from('x'),DEFAULT_MODEL).size,undefined);
  assert.equal(buildImageRequest('cute',Buffer.from('x'),DEFAULT_MODEL).resolution,undefined);
  assert.equal(buildImageRequest('cute',Buffer.from('x'),'google/gemini-nano-banana-2.1').resolution,'1K');
  assert.equal(buildImageRequest('cute',Buffer.from('x'),'other-model').resolution,undefined);
