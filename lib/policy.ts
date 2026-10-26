@@ -1,4 +1,4 @@
-export const MAX_FILE = 3 * 1024 * 1024;
+export const MAX_FILE = 5 * 1024 * 1024;
 export const MAX_BODY = MAX_FILE + 64 * 1024;
 export const styles = {
  cute: { label: '귀엽게', icon: '✿', description: '동글동글, 사랑스러운 나' },

@@ -1,6 +1,4 @@
 import 'server-only';
-import { readFile } from 'node:fs/promises';
-import path from 'node:path';
 import sharp from 'sharp';
 import { buildCaricaturePrompt } from './prompts';
 import { imageType, MAX_FILE, type Style } from './policy';
@@ -25,13 +23,9 @@ export async function prepareStyleReference(bytes: Buffer, style: Style, paired:
  return `data:image/png;base64,${normalized.toString('base64')}`;
 }
 /** Optional bundled art reference; selection depends on the requested expression. */
-export async function loadStyleReference(style: Style): Promise<string | undefined> {
- const configured=process.env.CARICATURE_STYLE_REFERENCE_PATH;
- if(!configured) return undefined;
- if(configured!=='assets/style-reference.png') throw new Error('Invalid style reference configuration');
- const filename=style==='similar'?'style-reference-similar.png':'style-reference-cute.png';
- const bytes=await readFile(path.join(process.cwd(),'assets',filename));
- return prepareStyleReference(bytes,style,false);
+export async function loadStyleReference(_style: Style): Promise<string | undefined> {
+ // The old style reference depicts a different, more realistic drawing style.
+ return undefined;
 }
 export function buildImageRequest(style: Style, identity: Buffer, model: string, reference?: string) {
  const urls=[`data:image/jpeg;base64,${identity.toString('base64')}`];

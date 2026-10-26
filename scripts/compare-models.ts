@@ -29,7 +29,7 @@ const output=path.resolve(outPath);
 await mkdir(output,{recursive:false});
 async function prepareImage(file:string,identity:boolean) {
  const bytes=await readFile(file);
- if(!imageType(bytes)||bytes.length>MAX_FILE) throw new Error('Inputs must be JPG/PNG/WebP under 3MiB.');
+ if(!imageType(bytes)||bytes.length>MAX_FILE) throw new Error('Inputs must be JPG/PNG/WebP under 5MiB.');
  const img=sharp(bytes,{limitInputPixels:16000000});const meta=await img.metadata();
  if((meta.pages||1)>1) throw new Error('Animated inputs are unsupported.');
  const buffer=await img.rotate().resize(1536,1536,{fit:'inside',withoutEnlargement:true}).flatten({background:'#ffffff'}).jpeg({quality:90}).toBuffer();

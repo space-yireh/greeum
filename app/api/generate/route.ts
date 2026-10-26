@@ -18,16 +18,16 @@ export async function POST(req:Request) {
  if(!limiter.take(key)) return error('잠시 쉬어 주세요. 10분에 3회까지, 한 번에 한 장만 만들 수 있어요.',429);
  try {
   if(!req.headers.get('content-type')?.startsWith('multipart/form-data')) return error('사진 업로드 형식이 올바르지 않습니다.',400);
-  if(Number(req.headers.get('content-length'))>MAX_BODY) return error('사진은 3MB 이하로 올려 주세요.',413);
+  if(Number(req.headers.get('content-length'))>MAX_BODY) return error('사진은 5MB 이하로 올려 주세요.',413);
   const reader=req.body?.getReader(); if(!reader) return error('사진이 없습니다.',400);
   const chunks:Uint8Array[]=[]; let size=0;
-  while(true) { const {done,value}=await reader.read(); if(done) break; size+=value.length; if(size>MAX_BODY) { await reader.cancel(); return error('사진은 3MB 이하로 올려 주세요.',413); } chunks.push(value); }
+  while(true) { const {done,value}=await reader.read(); if(done) break; size+=value.length; if(size>MAX_BODY) { await reader.cancel(); return error('사진은 5MB 이하로 올려 주세요.',413); } chunks.push(value); }
   let form:FormData;
   try { form=await new Response(Buffer.concat(chunks),{headers:{'Content-Type':req.headers.get('content-type')!}}).formData(); } catch { return error('업로드 내용을 읽을 수 없어요.',400); }
   const photo=form.get('photo'), style=form.get('style');
   if(form.get('consent')!=='yes') return error('외부 AI 전송에 동의해 주세요.',400);
-  if(!isStyle(style)) return error('스타일을 선택해 주세요.',400);
-  if(!(photo instanceof File) || !photo.size || photo.size>MAX_FILE) return error('3MB 이하의 사진 한 장을 선택해 주세요.',400);
+  if(!isStyle(style) || style!=='cute') return error('귀여운 캐리커처만 만들 수 있어요.',400);
+  if(!(photo instanceof File) || !photo.size || photo.size>MAX_FILE) return error('5MB 이하의 사진 한 장을 선택해 주세요.',400);
   const bytes=Buffer.from(await photo.arrayBuffer());
   if(!imageType(bytes) || !['image/jpeg','image/png','image/webp'].includes(photo.type)) return error('JPG, PNG, WebP 사진만 사용할 수 있어요.',400);
   let clean:Buffer;

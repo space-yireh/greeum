@@ -4,15 +4,12 @@ import sharp from 'sharp';
 import {BASE_STYLE_PROMPT,STYLE_PROMPTS,buildCaricaturePrompt} from '../lib/prompts';
 import {buildImageRequest,normalizeMonochrome,prepareStyleReference,DEFAULT_MODEL} from '../lib/generation';
 import type {Style} from '../lib/policy';
-test('all outgoing options retain identical base style, separate expression and identity/reference roles',()=>{
- for(const style of ['cute','similar','funny'] as Style[]) {
-  const body=buildImageRequest(style,Buffer.from('identity'),'google/gemini-2.5-flash-image','data:image/png;base64,reference');
-  assert.ok(body.prompt.startsWith(BASE_STYLE_PROMPT));assert.ok(body.prompt.includes(STYLE_PROMPTS[style]));
-  assert.match(body.prompt,/Image 2 is ART STYLE ONLY/);assert.equal(body.input_references.length,2);
-  assert.equal(body.input_references[0].image_url.url,'data:image/jpeg;base64,aWRlbnRpdHk=');
- }
- assert.equal(buildImageRequest('cute',Buffer.from('x'),'m').input_references.length,1);
- assert.doesNotMatch(buildCaricaturePrompt('cute'),/Image 2 is ART STYLE ONLY/);
+test('cute request uses the new marker prompt and one identity image',()=>{
+ const body=buildImageRequest('cute',Buffer.from('identity'),DEFAULT_MODEL);
+ assert.equal(body.prompt,BASE_STYLE_PROMPT);
+ assert.match(body.prompt,/broad black pen/);
+ assert.equal(body.input_references.length,1);
+ assert.equal(body.input_references[0].image_url.url,'data:image/jpeg;base64,aWRlbnRpdHk=');
 });
 test('grayscale output removes color but retains intermediate tones and antialiased line edges',async()=>{
  const pixels=Buffer.from([0,0,0,85,85,85,128,128,128,255,255,255,200,80,120]);
@@ -51,9 +48,3 @@ test('selected GPT default uses high quality without size and preserves Gemini s
  assert.equal(buildImageRequest('cute',Buffer.from('x'),'other-model').resolution,undefined);
 });
 
-test('selected reference never overrides identity and style-specific anatomy instructions',()=>{
- assert.match(buildCaricaturePrompt('cute',true),/shorten the lower face/);
- assert.match(buildCaricaturePrompt('similar',true),/Keep the original facial length/);
- assert.match(buildCaricaturePrompt('cute',true),/Image 2 is ART STYLE ONLY/);
- assert.doesNotMatch(buildCaricaturePrompt('cute',false),/Image 2 is ART STYLE ONLY/);
-});
