@@ -73,3 +73,11 @@ Production에서는 APP_ORIGIN이 없으면 생성 요청을 거부합니다. Pr
 ## 이번 작업의 검증 결과
 
 `npm test`: 4개 통과(서버 API는 모의 OpenRouter 응답 사용). `npm run typecheck`, `npm run build` 통과. 로컬 프로덕션 화면에서 스타일 변경, 동의 토글, 사진 미선택 시 생성 비활성화를 확인했습니다. 유료 AI 생성과 실제 Vercel 배포는 실행하지 않았습니다.
+
+## 운영 로그와 다운로드
+
+Vercel Runtime Logs에서 `image_generation`을 검색합니다. `timestamp`는 UTC이며 응답의 `X-Request-Id`와 로그의 `request_id`가 같습니다. `cost_usd`와 토큰 수의 null은 미제공이며 0이 아닙니다. 이미지 바이트와 크기는 브라우저 전처리 후 서버가 받은 사진 기준입니다. 로그 보관과 검색 기간은 Vercel 설정과 요금제에 따릅니다. 일별 집계 시 timestamp를 Asia/Seoul로 변환하고 비용 미제공 건수를 별도로 집계합니다.
+
+다운로드는 결과 이미지를 서버로 재전송해 PNG attachment로 반환합니다. 결과 바이트에 결합한 서명은 30분간 유효하며 서버는 파일을 저장하지 않습니다. 실패할 경우 결과 이미지를 길게 눌러 저장하거나 Chrome/Safari에서 열 수 있습니다. 서버 제한은 인스턴스별 메모리 제한이므로 전체 배포에서 일관된 제한이 필요하면 별도 공유 제한 수단이 필요합니다.
+
+배포 후 데스크톱 Chrome, Android Chrome, Android 카카오톡, iPhone Safari, iPhone 카카오톡에서 사진 생성 후 다운로드해 파일 앱이나 갤러리에서 PNG를 열고 두 번의 파일명이 다른지 확인합니다. 실패하면 이미지를 길게 눌러 저장하거나 외부 브라우저로 열어 확인하고 OS 및 앱 버전을 기록합니다.
