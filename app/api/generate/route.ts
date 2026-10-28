@@ -1,5 +1,6 @@
 import 'server-only';
 import sharp from 'sharp';
+import { saveResult, storageEnabled } from '../../../lib/result-storage';
 import { createHash, randomUUID } from 'node:crypto';
 import { MAX_BODY, MAX_FILE, imageType, isStyle, Limiter } from '../../../lib/policy';
 import { buildImageRequest, DEFAULT_MODEL, loadStyleReference, normalizeMonochrome } from '../../../lib/generation';
@@ -83,7 +84,9 @@ async function handle(req:Request,log:Metrics) {
   try { output=await normalizeMonochrome(rawOutput); } catch { return error('AI가 손상된 이미지를 반환했어요.',502); }
   // Binary response avoids base64 inflation against Vercel's 4.5MB response limit.
   if(output.length>4*1024*1024) return error('결과가 너무 큽니다. 다시 시도해 주세요.',502);
-  return new Response(new Uint8Array(output),{headers:{...headers,'Content-Type':'image/png','Content-Disposition':'inline'}});
+  let downloadUrl:string|undefined;
+  if(storageEnabled()) { try { downloadUrl=await saveResult(output); } catch { console.warn(JSON.stringify({event:'result_storage_failed'})); } }
+  return new Response(new Uint8Array(output),{headers:{...headers,'Content-Type':'image/png','Content-Disposition':'inline',...(downloadUrl?{'X-Download-Url':downloadUrl}:{})}});
  } catch(e) { log.error_code=e instanceof Error && ['TimeoutError','AbortError'].includes(e.name)?'UPSTREAM_TIMEOUT':'GENERATION_ERROR'; return error(e instanceof Error && ['TimeoutError','AbortError'].includes(e.name)?'생성이 지연되어 종료했어요. 잠시 뒤 다시 시도해 주세요.':'연결에 문제가 생겼어요. 잠시 뒤 다시 시도해 주세요.',504); }
  finally { limiter.release(key); }
 }

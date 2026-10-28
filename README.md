@@ -79,3 +79,12 @@ Production에서는 APP_ORIGIN이 없으면 생성 요청을 거부합니다. Pr
 Vercel Runtime Logs에서 `image_generation`을 검색합니다. `timestamp`는 UTC이며 응답의 `X-Request-Id`와 로그의 `request_id`가 같습니다. `cost_usd`와 토큰 수의 null은 미제공이며 0이 아닙니다. 이미지 바이트와 크기는 브라우저 전처리 후 서버가 받은 사진 기준입니다. 로그 보관과 검색 기간은 Vercel 설정과 요금제에 따릅니다. 일별 집계 시 timestamp를 Asia/Seoul로 변환하고 비용 미제공 건수를 별도로 집계합니다.
 
 배포 후 데스크톱 Chrome, Android Chrome, Android 카카오톡, iPhone Safari, iPhone 카카오톡에서 사진 생성 후 다운로드해 파일 앱이나 갤러리에서 PNG를 열고 다운로드가 정상 작동하는지 확인합니다. 실패하면 이미지를 길게 눌러 저장하거나 외부 브라우저로 열어 확인하고 OS 및 앱 버전을 기록합니다.
+
+## Android 카카오톡 다운로드 시험 설정
+
+1. Vercel 프로젝트의 Storage에서 **Private** Blob 저장소를 생성해 프로젝트의 Production 환경에 연결합니다. 스토어의 `BLOB_READ_WRITE_TOKEN`은 서버 환경변수로 설정하며 공개하지 않습니다.
+2. Production에 무작위 비밀값 `CRON_SECRET`을 32자 이상으로 설정합니다. Vercel Cron은 이 값을 Authorization 헤더에 사용합니다. 이 값은 다운로드 링크 서명에도 쓰므로 변경하면 기존 링크가 만료됩니다.
+3. 이 저장소의 코드를 배포합니다. `vercel.json`의 Cron은 매일 03:00 UTC에 실행되고 24시간 이상 지난 `greeum-results/` 파일을 삭제합니다. 정상 실행 시 보관 시간은 약 24~48시간이며 실패하거나 Cron을 사용할 수 없으면 더 길어집니다. Vercel Cron 실행 결과와 `result_cleanup` 또는 `result_cleanup_failed` 로그를 확인하고, 실패 시 Blob 콘솔에서 직접 삭제하세요.
+4. 사용자가 선택한 원본 사진은 Blob에 저장하지 않습니다. 생성 결과만 private 저장소에 저장하고, 앱의 HTTPS 다운로드 링크는 1시간 동안 유효합니다. 링크를 가진 사람은 기간 중 이미지를 받을 수 있으므로 링크 공유를 피하세요.
+5. 설정이나 저장이 실패한 경우 이미지는 브라우저에 그대로 표시되고 기존 Blob 다운로드로 돌아갑니다. 이 경우 Android 카카오톡은 계속 실패할 수 있습니다. `result_storage_failed` 로그와 환경변수 설정을 확인하세요.
+6. 배포 후 Android 카카오톡에서 새로 생성하고 다운로드 → 갤러리에서 PNG 열기를 확인합니다. Android Chrome, 데스크톱 Chrome, iPhone Safari/카카오톡도 별도로 확인해야 합니다. 이 프로젝트에는 기기별 동작을 보증하는 자동화가 없습니다.
