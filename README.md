@@ -1,19 +1,82 @@
 # 조금 다른 나 — 캐리커처 MVP
 
-Next.js App Router + TypeScript, Node 런타임. 사진 선택 → 명시적 전송 동의 → 3개 스타일 중 하나로 생성 → 미리보기와 다운로드. 원본/결과 사진을 DB·스토리지·파일에 쓰지 않고 요청 메모리에서만 처리합니다. 브라우저 메모리의 결과는 새로고침하면 사라집니다.
+사진을 굵은 검은 펜 선의 귀여운 캐리커처로 만드는 웹앱입니다. 현재 스타일은 **귀엽게(`cute`) 한 가지**입니다. 사진 선택 → 외부 AI 전송 동의 → 생성 → 미리보기·PNG 다운로드 순서로 사용합니다. 두 사람이 함께 나온 사진도 프롬프트에서 지원합니다.
 
-## 실행
+Next.js App Router + React + TypeScript, Node.js 런타임을 사용합니다. 아래 설명은 현재 소스 기준이며, 실제 모델 사용 가능 여부나 기기별 다운로드 성공을 보증하는 검증 결과는 아닙니다.
 
-Node.js 22 이상 권장.
+## 로컬 실행
+
+Node.js 22 이상을 권장합니다. 프로젝트 루트에서 실행하세요.
 
 ```sh
 npm ci
-cp .env.example .env.local
-# .env.local에 OPENROUTER_API_KEY 입력
+cp -n .env.example .env.local
+```
+
+기존 `.env.local`은 유지하고 `OPENROUTER_API_KEY`에 본인 API 키를 설정한 뒤 실행합니다.
+
+```sh
 npm run dev
 ```
 
-http://localhost:3000 을 엽니다. `.env.local`은 커밋하지 마세요. 키는 `OPENROUTER_API_KEY` 서버 변수로만 사용하며 `NEXT_PUBLIC_` 접두사를 쓰지 않습니다.
+http://localhost:3000 을 엽니다. 포트를 바꾸거나 다른 주소로 접속하면 `APP_ORIGIN`도 브라우저 주소의 origin과 정확히 맞추고 서버를 다시 시작하세요. 종료는 Ctrl+C입니다. API 키 없이 화면을 열 수 있지만 생성은 실패합니다. 실제 생성에는 비용이 발생합니다.
+
+## 환경변수
+
+[설정 예시](.env.example)를 참고하세요. 비밀값은 서버 환경변수로만 설정하고 `NEXT_PUBLIC_` 접두사를 붙이거나 커밋하지 않습니다.
+
+| 변수 | 용도 |
+| --- | --- |
+| `OPENROUTER_API_KEY` | 이미지 생성에 필요한 OpenRouter API 키 |
+| `OPENROUTER_MODEL` | 선택. 미설정 시 `openai/gpt-image-2.5-sunburst` |
+| `APP_ORIGIN` | 허용할 웹앱 origin. 로컬 예: `http://localhost:3000`, 끝에 `/` 없음. production 필수 |
+| `BLOB_READ_WRITE_TOKEN` | 선택. 결과 임시 보관용 Vercel Private Blob 토큰 |
+| `CRON_SECRET` | 선택. 32자 이상. 결과 다운로드 링크 서명과 정리 API 인증에 함께 사용 |
+| `OPENROUTER_BASELINE_MODEL` | 선택. [과거 모델 비교 도구](AB_TEST.md) 전용 기본 비교 모델 |
+
+Blob 토큰과 32자 이상의 `CRON_SECRET`이 모두 있어야 결과 저장이 활성화됩니다. 로컬 화면·생성 확인에는 이 두 값이 필요하지 않습니다. `CARICATURE_STYLE_REFERENCE_PATH`는 현재 웹앱에서 사용하지 않습니다.
+
+## 현재 생성 동작
+
+- 화면은 `cute`로 고정되어 있으며 API도 `cute`만 허용합니다. 공용 타입에 남은 `similar`·`funny`는 현재 서비스 옵션이 아닙니다.
+- 프롬프트 버전은 `cute-marker-caricature-v3`입니다. 단순한 얼굴 표현, 굵은 선, 검은 면과 흰 여백을 사용하고 주요 인물의 위치·헤어스타일·표정·액세서리·포즈를 반영하도록 요청합니다.
+- 웹앱은 그림체 참고 이미지를 보내지 않습니다. 업로드한 인물 사진 한 장만 전송합니다. [기존 참고 이미지](assets/README.md)는 실험 자료로 남아 있습니다.
+- 서버는 `POST https://openrouter.ai/api/v1/images`를 호출합니다. 기본 모델은 `quality: high`, `aspect_ratio: 1:1`, `n: 1`이며 `size`는 지정하지 않습니다. 모델을 바꾸면 요청 옵션은 [생성 코드](lib/generation.ts)의 모델 분기에 따라 달라집니다.
+- 응답의 `data[0].b64_json`을 디코딩하고 파일 서명을 확인합니다. 흰 배경 합성·그레이스케일 PNG 변환을 수행하며 threshold 이진화는 하지 않습니다. 결과가 4MiB를 넘으면 오류를 반환합니다.
+- 외부 AI 요청 제한 시간은 180초, 브라우저 요청 제한은 200초, 생성 라우트의 `maxDuration`은 240초입니다. 실제 실행 가능 시간은 호스팅 설정에 따릅니다. 자동 재시도나 다른 모델 자동 전환은 없습니다.
+
+## 사진 처리와 보관
+
+JPG·PNG·WebP 정지 이미지, 파일당 5MiB 이하를 받습니다. 브라우저는 3.5MiB 초과 파일을 최대 2048px의 JPEG로 줄여 전송합니다. 서버는 받은 파일의 형식·파일 서명·디코딩을 확인하고 1,600만 화소 제한을 적용합니다. 회전 방향을 적용하고 최대 1536px JPEG로 재인코딩하며 메타데이터를 제거합니다. 서버 제한은 브라우저 전처리 후 파일에 적용됩니다.
+
+원본 사진은 앱의 DB·Blob·파일에 저장하지 않고 메모리에서 처리합니다. 전처리한 사진은 앱 서버를 거쳐 OpenRouter와 모델 공급자로 전송되며 익명화된 얼굴 특징만 보내는 방식은 아닙니다. 사진 속 인물에게 동의를 받은 사진만 사용합니다. 동의는 기본 해제이고 사진 변경 시 초기화되며 서버도 확인합니다. 동의 이력을 DB에 기록하지는 않습니다.
+
+생성 결과는 다음 두 방식으로 다운로드합니다.
+
+- 저장 설정이 없거나 저장에 실패하면 브라우저 메모리의 Blob URL을 사용합니다. 새로고침하면 화면의 결과는 사라지며 일부 인앱 브라우저에서는 다운로드가 실패할 수 있습니다.
+- 저장 설정이 있으면 결과 PNG만 Private Blob의 `greeum-results/`에 보관하고 1시간 유효한 HTTPS 다운로드 링크를 반환합니다. 링크를 가진 사람은 유효 기간 동안 다운로드할 수 있습니다. `CRON_SECRET` 변경 시 기존 링크는 무효화됩니다.
+
+[정리 일정](vercel.json)은 매일 03:00 UTC(한국 시간 12:00)입니다. 정리 API는 업로드 후 24시간이 지난 결과를 삭제하므로 정상 실행 시 보관 시간은 약 24~48시간입니다. Cron 실패·미설정 시 더 오래 남을 수 있습니다. 브라우저에서 사진을 지우는 동작은 Blob의 결과 삭제 요청이 아닙니다.
+
+앱은 사진·base64·API 키·공급자 응답 본문을 로그에 남기지 않습니다. 생성·다운로드 응답은 `no-store`입니다. 메모리 해제는 런타임 GC에 따릅니다. 외부 업체와 호스팅 업체의 처리·보관 정책은 별도로 적용됩니다.
+
+## 요청 제한과 운영 로그
+
+서버 인스턴스 메모리에서 IP 해시별 10분에 3회, 동시에 1개 요청으로 제한합니다. Vercel의 `x-vercel-forwarded-for`를 사용하며 없으면 공통 `local` 버킷을 사용합니다. 제한기는 입력 검사 전에 적용되어 잘못된 입력과 AI 실패도 시도 횟수에 포함됩니다. Origin·키 검사에서 거절된 요청은 제외됩니다.
+
+인스턴스 재시작 시 제한은 초기화되고 분산 환경의 전역 한도가 아닙니다. Origin 검사는 인증이 아닙니다. 공개 서비스로 확장할 때는 별도의 접근·비용 제한을 검토하세요. 실제 생성 비용은 모델·공급자·사용량에 따라 달라지며 `usage.cost` 또는 OpenRouter 대시보드에서 확인합니다. 다운로드는 추가 AI 호출이 없고 다시 생성하면 새 유료 요청입니다. 브라우저 종료가 이미 진행된 생성의 과금 취소를 보장하지는 않습니다.
+
+`image_generation` 로그에 요청 ID, UTC 시각, 모델·옵션, 입력 크기·해상도, 토큰·비용, 상태·소요 시간이 기록됩니다. 응답의 `X-Request-Id`와 로그의 `request_id`가 같습니다. 비용·토큰의 `null`은 미제공이며 0이 아닙니다. 한국 기준 일별 집계 시 UTC를 Asia/Seoul로 변환하세요.
+
+## Vercel 배포와 다운로드 확인
+
+1. 프로젝트를 Import하고 `OPENROUTER_API_KEY`, 실제 배포 주소의 `APP_ORIGIN`을 설정합니다. Preview에서도 접속 주소와 일치해야 합니다. 환경변수 변경 후 재배포합니다.
+2. 240초의 라우트 실행 시간을 지원하는 환경인지 확인합니다. 빌드 명령은 `npm run build`입니다.
+3. HTTPS 결과 다운로드가 필요하면 **Private** Blob 스토어를 연결하고 `BLOB_READ_WRITE_TOKEN`, 32자 이상의 `CRON_SECRET`을 설정합니다.
+4. Cron 실행과 `result_cleanup` 로그를 확인합니다. `result_cleanup_failed` 또는 `result_storage_failed`가 나오면 설정을 확인하고, 정리 실패로 남은 파일은 Blob 콘솔에서 삭제합니다.
+5. 데스크톱 Chrome, Android Chrome·카카오톡, iPhone Safari·카카오톡에서 실제 생성·다운로드 후 PNG 열기를 확인합니다. 실패하면 외부 브라우저로 열어 확인하고 OS·앱 버전을 기록합니다. 기기별 성공을 보증하는 자동화는 없습니다.
+
+## 개발 검증
 
 ```sh
 npm test
@@ -22,69 +85,6 @@ npm run build
 npm start
 ```
 
-## Vercel 배포
+단위·통합 테스트는 모의 OpenRouter·Blob 응답을 사용합니다. 테스트 통과는 실제 유료 생성, 모델 품질, 배포, 모바일 다운로드의 성공 검증과 별개입니다. 실제 키로 확인할 때는 단일 스타일 생성, 동의 미선택, 잘못된 파일, 용량 제한, 요청 횟수 제한, 공급자 오류, 선택적 결과 저장·다운로드·정리를 점검하세요.
 
-이 폴더를 별도 Git 저장소로 업로드해 Vercel에서 Import 하거나 Vercel CLI로 배포합니다. 프레임워크는 Next.js, 빌드 명령은 기본 `npm run build`입니다.
-
-환경변수:
-
-| 이름 | 값 |
-| --- | --- |
-| `OPENROUTER_API_KEY` | 소액 지출 한도를 설정한 전용 OpenRouter 키 |
-| `OPENROUTER_MODEL` | `google/gemini-2.5-flash-image` (선택) |
-| `APP_ORIGIN` | 실제 앱 주소, 예: `https://my-portrait.vercel.app` (끝에 `/` 없이) |
-
-Production에서는 APP_ORIGIN이 없으면 생성 요청을 거부합니다. Preview 배포도 해당 Preview URL로 환경변수를 설정하세요. 환경변수를 바꾸면 재배포합니다. 함수 최대 실행 시간 120초를 지원하는 요금제/설정을 사용하세요. 외부 AI 대기는 100초 제한입니다. 사진은 5MiB까지 선택할 수 있으며 큰 파일은 브라우저에서 JPEG로 줄인 뒤 전송합니다. 결과는 binary로 반환합니다. 결과 4MiB 초과 시 오류 처리합니다. 플랫폼 제한/실행 시간은 배포 시 Vercel 설정에서 확인하세요.
-
-## API 검증 (2026-10-25)
-
-공식 최신 문서와 공개 모델 목록을 확인했습니다. 예전 chat completions 예제 대신 전용 Image API를 사용합니다.
-
-- 문서: https://openrouter.ai/docs/guides/overview/multimodal/image-generation
-- 실제 이미지 모델 목록: https://openrouter.ai/api/v1/images/models
-- 기본 모델: https://openrouter.ai/google/gemini-2.5-flash-image
-- 공급자별 능력/가격: https://openrouter.ai/api/v1/images/models/google/gemini-2.5-flash-image/endpoints
-
-공개 목록에서 기본 모델의 입력 `image,text`, 출력 `image,text`, `input_references` 0~3개, `n` 1개 지원을 확인했습니다. 공급자별 엔드포인트 조회는 이번 환경에서 접근하지 못했습니다. 실서비스 키가 제공되지 않아 유료 이미지 생성은 실행하지 않았습니다. 따라서 모델의 실제 결과 품질과 계정별 공급자 사용 가능 여부는 키 설정 후 확인해야 합니다.
-
-요청: `POST https://openrouter.ai/api/v1/images`, Bearer 인증, JSON `{model, prompt, n:1, input_references:[{type:"image_url", image_url:{url:"data:image/jpeg;base64,..."}}]}`. 응답의 `data[0].b64_json`을 읽고 실제 파일 서명을 확인합니다. `media_type`이 누락될 수도 있으므로 바이트로 형식을 판별합니다. 자동 재시도나 다른 모델 자동 전환은 하지 않습니다.
-
-## 사진 처리와 개인정보
-
-- JPG/PNG/WebP, 5MiB 이하, 디코딩 가능한 정지 이미지, 1,600만 화소 이하. 클라이언트와 서버에서 크기·형식을 검사하며 서버에서 파일 서명과 실제 디코딩도 검사합니다.
-- 서버는 회전 방향을 적용하고 최대 1536px로 줄여 JPEG 재인코딩합니다. Sharp 기본 동작으로 EXIF/GPS 등 메타데이터를 제거합니다. A 방식의 원본 기반 시각 정보는 외부 AI로 전송됩니다. 얼굴 특징만 보내는 익명화 방식이 아닙니다.
-- 앱은 사진·base64·AI 응답 본문·키를 로그에 출력하지 않습니다. 요청/응답은 `no-store`. 외부 분석 도구 없음. 페이지의 외부 글꼴 요청에는 사진이 포함되지 않습니다.
-- 동의는 기본 해제이며 사진을 바꿀 때 초기화됩니다. 서버도 동의를 확인합니다. 동의 이력을 DB에 기록하지는 않습니다.
-- 사진은 앱 서버, OpenRouter, 선택 모델의 공급자를 거칩니다. 앱 미저장이 외부 업체의 무보관을 뜻하지 않습니다. 외부 처리/보관 정책은 https://openrouter.ai/privacy 및 https://openrouter.ai/docs/guides/privacy/provider-logging 을 확인하세요. 본인 사진 또는 사진 속 인물이 동의한 사진만 사용합니다.
-- 서버 메모리 해제는 런타임 GC에 따르며 암호학적 즉시 삭제를 보장하지 않습니다. 호스팅 업체의 접속 메타데이터 로그는 별개입니다. 운영 시 본문 캡처/이미지 로깅 도구를 추가하지 마세요.
-
-## 요청 제한과 비용
-
-메모리에서 IP 해시별 10분에 3회 시도, 동시 1개 요청. Vercel이 제공하는 `x-vercel-forwarded-for`만 사용하며 로컬은 하나의 공통 버킷입니다. 해시는 영구 저장하지 않습니다. 입력 오류와 AI 실패도 시도 횟수에 포함됩니다. 동일 IP의 여러 사용자는 한도를 공유합니다.
-
-**이 제한은 서버 인스턴스별이며 재시작 시 초기화됩니다.** 분산 환경에서 전역 한도나 강한 남용 방지가 아닙니다. Origin 검사도 인증이 아닙니다. 주변 사람에게만 Vercel Deployment Protection 등으로 공유하고 OpenRouter 키의 지출 한도를 낮게 설정하세요. 공개 서비스 확장 시 Vercel Firewall 제한 또는 공유 원자적 카운터를 붙여야 합니다. 사진 저장소는 필요하지 않습니다.
-
-공식 모델 페이지 확인 시 이미지 출력 $30/100만 토큰, 입력 $0.30/100만 토큰이며 텍스트 출력 가격은 별도입니다. 한 장 비용은 출력 토큰/공급자/옵션에 따라 달라지므로 고정 단가를 보장하지 않습니다. 예를 들어 이미지 출력이 1,290토큰이면 출력만 약 $0.0387, 100장은 약 $3.87이며 입력·기타 비용이 추가됩니다. 이 숫자는 계산 예시입니다. 실제 비용은 OpenRouter 대시보드에서 확인하세요. 환율, 결제/크레딧 구매 수수료, Vercel 비용은 별도입니다. 다운로드는 추가 AI 호출이 없습니다. 다시 만들기는 새 유료 요청입니다. 브라우저 새로고침/연결 종료가 완료된 생성의 과금을 반드시 취소하지는 않으므로 자동 재시도하지 않습니다.
-
-## 확인 방법
-
-단위 테스트는 스타일 허용 목록, 위장 파일 서명, 동시성/횟수/기간 제한을 검증합니다. 키 설정 후 실제 사진으로 3가지 스타일, 다운로드, 동의 미선택, 잘못된 파일, 5MB 초과, 4번째 요청, 공급자 오류를 확인하세요. API/모델 스펙 검증과 유료 생성 성공 검증은 별개입니다.
-
-## 이번 작업의 검증 결과
-
-`npm test`: 4개 통과(서버 API는 모의 OpenRouter 응답 사용). `npm run typecheck`, `npm run build` 통과. 로컬 프로덕션 화면에서 스타일 변경, 동의 토글, 사진 미선택 시 생성 비활성화를 확인했습니다. 유료 AI 생성과 실제 Vercel 배포는 실행하지 않았습니다.
-
-## 운영 로그와 다운로드
-
-Vercel Runtime Logs에서 `image_generation`을 검색합니다. `timestamp`는 UTC이며 응답의 `X-Request-Id`와 로그의 `request_id`가 같습니다. `cost_usd`와 토큰 수의 null은 미제공이며 0이 아닙니다. 이미지 바이트와 크기는 브라우저 전처리 후 서버가 받은 사진 기준입니다. 로그 보관과 검색 기간은 Vercel 설정과 요금제에 따릅니다. 일별 집계 시 timestamp를 Asia/Seoul로 변환하고 비용 미제공 건수를 별도로 집계합니다.
-
-배포 후 데스크톱 Chrome, Android Chrome, Android 카카오톡, iPhone Safari, iPhone 카카오톡에서 사진 생성 후 다운로드해 파일 앱이나 갤러리에서 PNG를 열고 다운로드가 정상 작동하는지 확인합니다. 실패하면 이미지를 길게 눌러 저장하거나 외부 브라우저로 열어 확인하고 OS 및 앱 버전을 기록합니다.
-
-## Android 카카오톡 다운로드 시험 설정
-
-1. Vercel 프로젝트의 Storage에서 **Private** Blob 저장소를 생성해 프로젝트의 Production 환경에 연결합니다. 스토어의 `BLOB_READ_WRITE_TOKEN`은 서버 환경변수로 설정하며 공개하지 않습니다.
-2. Production에 무작위 비밀값 `CRON_SECRET`을 32자 이상으로 설정합니다. Vercel Cron은 이 값을 Authorization 헤더에 사용합니다. 이 값은 다운로드 링크 서명에도 쓰므로 변경하면 기존 링크가 만료됩니다.
-3. 이 저장소의 코드를 배포합니다. `vercel.json`의 Cron은 매일 03:00 UTC에 실행되고 24시간 이상 지난 `greeum-results/` 파일을 삭제합니다. 정상 실행 시 보관 시간은 약 24~48시간이며 실패하거나 Cron을 사용할 수 없으면 더 길어집니다. Vercel Cron 실행 결과와 `result_cleanup` 또는 `result_cleanup_failed` 로그를 확인하고, 실패 시 Blob 콘솔에서 직접 삭제하세요.
-4. 사용자가 선택한 원본 사진은 Blob에 저장하지 않습니다. 생성 결과만 private 저장소에 저장하고, 앱의 HTTPS 다운로드 링크는 1시간 동안 유효합니다. 링크를 가진 사람은 기간 중 이미지를 받을 수 있으므로 링크 공유를 피하세요.
-5. 설정이나 저장이 실패한 경우 이미지는 브라우저에 그대로 표시되고 기존 Blob 다운로드로 돌아갑니다. 이 경우 Android 카카오톡은 계속 실패할 수 있습니다. `result_storage_failed` 로그와 환경변수 설정을 확인하세요.
-6. 배포 후 Android 카카오톡에서 새로 생성하고 다운로드 → 갤러리에서 PNG 열기를 확인합니다. Android Chrome, 데스크톱 Chrome, iPhone Safari/카카오톡도 별도로 확인해야 합니다. 이 프로젝트에는 기기별 동작을 보증하는 자동화가 없습니다.
+과거 모델 비교 스크립트의 사용법과 현재 제약은 [AB_TEST.md](AB_TEST.md)에 정리했습니다.
